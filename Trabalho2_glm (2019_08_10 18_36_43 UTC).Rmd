@@ -1,0 +1,359 @@
+---
+title: "Modelos Lineares Generalizados para Dados de Contagem"
+author: "Ananda Bordignon, Brendha Lima, Giovanna Lazzarin"
+date: "28 de novembro de 2018"
+output: word_document
+---
+
+```{r, include=FALSE}
+library(readxl)
+library(MASS)
+library(ggplot2)
+library(gridExtra)
+library(hnp)
+library(car)
+library(statmod)
+library(effects)
+library(knitr)
+library(corrplot)
+
+da <- read.csv('CONTAGEM2.csv', sep = ';')
+da$obitos <- as.numeric(da$obitos)
+da$pib <- as.numeric(da$pib)
+da$populacao <- as.numeric(da$populacao)
+da$frota <- as.numeric(da$frota)
+da$emergencia <- as.numeric(da$emergencia)
+
+```
+
+
+
+#1. Introdução
+
+#2. Dados 
+
+Os dados a respeito do número de acidentes no estado de Alagoas no ano de 2016 foram extraídos do Departamento de Informática do Sistema Único de Saúde (DATASUS) e suas características sociodemográficas do último senso de 2010 foram extraídas no portal do Instituto de Pesquisa Econômica Aplicada (IPEADATA). Segundo o Batalhão de Polícia de Trânsito (BPTRAN), todo evento ocorrido na via pública (incluindo calçadas), decorrente do trânsito de veículos e pessoas, que resulta em danos humanos e/ou materiais é definido como acidente de trânsito. Compreende: colisões entre veículos, choque com objetos fixos, capotamentos, tombamentos, atropelamentos, queda de pedestres e ciclistas, etc. Além disso toda ocorrência fortuita ou danosa, envolvendo veículos em circulação, ou parados, respectivos ocupantes, pedestres e objetos móveis ou fixos.
+
+Os dados a serem trabalhados neste estudo referem-se à acidentes de trânsito ocorridos nas vias municipais, sem incluir as Rodovias Estaduais e Federais.
+
+Cada linha da base corresponde a 1 dos 102 municípios do estado do Alagoas, as características sociodemográficas selecionadas como variáveis explicativas foram estas:
+
+*frota* - Frota total de veículos.
+
+*pib* - Pib per capita a preços correntes.
+
+*populacao* - População residente.
+
+*emergencia* - Estabelecimentos de saúde com atendimento de emergência total.
+
+o interesse deste trabalho é modelar o número de acidentes de trânsito em funções das demais.
+
+As primeiras 6 linhas da base de dados tem a seguinte forma:
+
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=TRUE}
+kable(head(da), caption= "Tabela 1 - Primeiras observações da base de dados")
+
+```
+
+#3. Análise Descritiva
+
+##3.1 Estatísticas básicas
+
+Para iniciar uma breve análise descritiva, podemos usar a função "summary"" para visualizar o mínimo, máximo, mediana e quartis das varíaveis explicativas do estudo.
+
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=FALSE}
+kable(summary(da), caption= "Tabela 1 - Estatísticas resumo das variáveis explicativa")
+summary(da)
+```
+
+Na variável "município" são elencados todos os 102 municípios do Alagoas. Para a variável resposta, nota-se um total de 23 de dados faltantes, ou seja, não foram registrados acidentes de trânsito nestes municípios. 
+
+Observamos alguns histogramas e box-plots que facilitam a visualização dos dados. Nota-se que algumas variáveis têm um ou mais pontos discrepantes. Em alguns casos pode ser conveniente trabalhar com o log da variável para obter uma maior simetria, ou, outra alternativa é remover os valores discrepantes.
+
+```{r, echo=FALSE, fig.align='center'}
+#histogramas
+par(mfrow = c(2,3))
+hist(da$obitos, main = 'Óbitos', xlab = '', ylab = '')
+hist(da$pib, main = 'PIB', xlab = '', ylab = '')
+hist(da$populacao, main = 'População', xlab = '', ylab = '')
+hist(da$frota, main = 'Frota', xlab = '', ylab = '')
+hist(da$emergencia, main = 'Emergência', xlab = '', ylab = '')
+
+#boxplots
+par(mfrow = c(2,3))
+boxplot(da$obitos, main = 'Óbitos', xlab = '', ylab = '')
+boxplot(da$pib, main = 'PIB', xlab = '', ylab = '')
+boxplot(da$populacao, main = 'População', xlab = '', ylab = '')
+boxplot(da$frota, main = 'Frota', xlab = '', ylab = '')
+boxplot(da$emergencia, main = 'Emergência', xlab = '', ylab = '')
+
+```
+
+
+##3.2 Transformação das covariáveis
+
+Aplicaremos uma transformação logarítmica nas variáveis observadas como mais assimétricas nas análises descritivas e verificaremos novamente a forma da distribuição das transformações.
+
+```{r, echo=FALSE,  fig.align='center', include=FALSE}
+da_original <- da
+da$pib_log <- log(da$pib)
+da$populacao_log <- log(da$populacao)
+da$frota_log <- log(da$frota)
+da$emergencia_log <- log(da$emergencia)
+da
+
+```
+  
+  
+```{r, echo=FALSE,  fig.align='center', include=TRUE}
+  
+par(mfrow = c(2,3))
+hist(da$obitos, main = 'Log de Óbitos', xlab = '', ylab = '')
+hist(da$pib_log, main = 'Log de PIB', xlab = '', ylab = '')
+hist(da$populacao_log, main = 'Log de População', xlab = '', ylab = '')
+hist(da$frota_log, main = 'Log de Frota', xlab = '', ylab = '')
+hist(da$emergencia_log, main = 'Log de Emergência', xlab = '', ylab = '')
+  
+par(mfrow = c(2,3))
+boxplot(da$obitos, main = 'Log de Óbitos', xlab = '', ylab = '')
+boxplot(da$pib_log, main = 'Log de PIB', xlab = '', ylab = '')
+boxplot(da$populacao_log, main = 'Log de População', xlab = '', ylab = '')
+boxplot(da$frota_log, main = 'Log de Frota', xlab = '', ylab = '')
+boxplot(da$emergencia_log, main = 'Log de Emergência', xlab = '', ylab = '')
+  
+```
+
+Agora podemos observar uma simetria maior nas distribuições das variáveis transformadas.
+
+##3.3 Correlação
+
+Agora, verificaremos a correlação entre as variáveis em estudo, nesta etapa vamos considerar as variáveis transformadas no tópico anterior.
+
+Como já visto, a variável resposta do estudo possui alguns dados faltantes, para resolver este problema é possível obter a correlação desta com as demais utilizando o argumento "use" da função cor.
+
+
+```{r, echo=FALSE,  fig.align='center', include=FALSE}
+
+head(da)
+cor <- cor(da[,c(3,4,5,6,7)], use = "na.or.complete")
+```
+```{r, echo=FALSE,  fig.align='center', include=TRUE}
+
+corrplot.mixed(cor, upper = "square")
+
+```
+
+Pode ser observado que a correlação é muito forte entre log da população e log da frota, estando em 100% de proporcionalidade direta (aumento de uma implica no aumento da outra, pois valor do coeficiente de correlação é positivo) e também de população com emergência (99%) e frota com emergência (99%).
+
+Optou-se por utilizar uma variável nova melhor aproveitando o efeito de interação entre duas, que é a combinação entre população e frota, já que são completamente correlacionadas e de forma positiva, assim criou-se a variável frota média.
+A matriz de correlação das variáveis melhorou muito com este ajuste e pode ser observada a nova distribuição das variáveis testadas no scaterplot.
+
+```{r, echo=FALSE,  fig.align='center', include=FALSE}
+head(da)
+da$frota_media <- da$frota/da$populacao
+da$frota_media_log <- log(da$frota/da$populacao)
+
+head(da)
+
+cor <- cor(da[,c(3,8,11,13)], use = "na.or.complete")
+corrplot.mixed(cor, upper = "square")
+
+```
+
+
+```{r, echo=FALSE,  warning=FALSE, fig.align='center', include=FALSE}
+##3.4 Gráficos de Dispersão
+
+scatterplotMatrix(da[,c(3,8,11,13)], col = c('Black', 'Red', 'Gray'), lwd = 3)
+```
+
+#4. Ajuste dos Modelos de Regressão
+
+Neste trabalho, queremos modelar uma variável de contagem, ou seja, uma variável discreta com suporte no conjunto dos inteiros não negativos. Nossa resposta é o número de acidentes de trânsito, para problemas deste tipo, comumente a primeira alternativa de modelagem via modelo linear generalizado faz uso da distribuição Poisson com função de ligação logarítmica.
+
+Existe a possibilidade da Poisson não se ajustar bem aos dados e à resposta, assim uma alternativa é usar uma modelagem com Binomial Negativa (usualmente nos casos em que a variância da distribuição não for igual a média, mas sim superior, a chamada superdispersão ou sobredispersão).
+
+Segue abaixo os ajustes dos GLM com log-linear de Poisson e com a distribuição Binomial Negativa.
+
+```{r, include=FALSE}
+##### GLM com resposta Poisson
+m1 <- glm(obitos ~ pib_log + frota_media_log + emergencia_log , data = da, family = 'poisson')
+summary(m1)
+
+##### GLM com resposta Binomial Negativa
+m2 <- glm.nb(obitos ~ pib_log + frota_media_log + emergencia_log, data = da)
+summary(m2)
+```
+
+
+##4.1 Escolhendo o Modelo 
+
+A escolha do modelo deve levar em consideração algumas métricas. Neste caso foi utilizada a verossimilhança e o AIC de cada um dos modelos testados com distribuição diferente.
+
+
+```{r, echo=FALSE, include=FALSE}
+#O modelo que apresentou menor AIC e maior verossimilhança foi o modelo Binomial Negativo (m2)
+
+ajuste = c('m1', 'm2')
+aic    = c(AIC(m1), AIC(m2))
+verossimilhanca = c(logLik(m1),logLik(m2))
+```
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=TRUE}
+kable(data.frame(ajuste, aic, verossimilhanca), caption= "Tabela 3 - Escolha do modelo adequado à base de dados")
+
+```
+
+Acima observa-se o resultado do Critério de Informação de Akaikke (AIC), que mede a "perda de informação" ao se usar o modelo ajustado em relação aos dados reais (modelo hipotético real), portanto o que fornecer menor valor é mais indicado. A log-verossimilhança possui o mesmo propósito, porém o melhor modelo a ser escolhido é aquele que tiver o maior valor. Para este conjunto de dados a distribuição e modelo mais aderentes são da Binomial Negativa.
+
+A seguir, obtivemos os gráficos envelopes dos dois ajustes, para confirmar qual modelo está melhor ajustado, através de seus resíduos. Deve-se observar se há presença de pontos fora dos limites ou se há pontos dentro dos limites porém apresentando padrões sistemáticos.
+
+```{r, echo=FALSE, include=TRUE}
+
+par(mfrow = c(1,2))
+hnp(m1, xlab = 'Percentil da N(0,1)', ylab = 'Resíduos', main = 'Gráfico Normal de Prob - Poisson')
+hnp(m2, xlab = 'Percentil da N(0,1)', ylab = 'Resíduos', main = 'Gráfico Normal de Prob - Bin Negativa')
+
+```
+
+
+##4.2 Modelo Escolhido
+
+O modelo escolhido é o que foi ajustado através da Binomial Negativa, que é uma distribuição de probabilidades discreta, que conta o número de tentativas necessárias para se obter k sucessos, em n ensaios de Bernoulli com probabilidade p em cada ensaio, conforme imagem abaixo.
+
+```{r, echo=FALSE, warning=FALSE, fig.align='center'}
+
+knitr::include_graphics("C:Users/Adm/Documents/GLM/Binomial_negativa.png")
+
+```
+
+
+##4.3 Reajuste do modelo 
+
+Por conta das covariáveis correlacionadas deve-se testá-las nos modelos, inserindo uma a uma sem a presença da outra. Buscou-se não incluir ao mesmo tempo o log da população e log da frota com log da frota média, pois esta é uma combinação delas. O modelo que apresentou melhor ajuste, menor deviance residual e mais sentido prático foi este citado a seguir, indexado como "m2.1", que utiliza informação de estabelcimentos de saúde com emergência e frota média para predizer o número médio de óbitos. Se comparado ao modelo anterior, que tinha o acréscimo do PIB (que neste caso não foi significante), o AIC e verossimilhança são muito parecidos, portanto optou-se por usar um modelo mais simples com menos variáveis.
+
+```{r, warnings=FALSE, include=FALSE}
+m2.1  <- glm.nb(obitos ~ emergencia_log + frota_media_log, data = da)
+summary(m2.1)  
+
+m2.2  <- glm.nb(obitos ~ pib_log + frota_media_log, data = da)
+summary(m2.2)  
+```
+
+
+```{r, warnings=FALSE, include=FALSE}
+
+ajuste = c('m2', 'm2.1')
+aic    = c(AIC(m2), AIC(m2.1))
+verossimilhanca = c(logLik(m2),logLik(m2.1))
+data_compara <- data.frame(ajuste, aic, verossimilhanca)
+
+```
+
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=TRUE}
+kable(data_compara, caption= "Tabela 4 - Comparativo de AIC e Verossimilhança entre ajustes")
+
+```
+
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=TRUE}
+kable(coefficients(m2.1), caption= "Tabela 5 - Estimativas dos coeficientes do modelo ajustado")
+
+```
+
+A seguir temos algumas considerações a cerca do ajuste do modelo, para garantir homocedasticidade, normalidade dos resíduos e adequação das estimativas.
+
+
+```{r, warnings=FALSE, include=TRUE}
+par(mfrow=c(2,2))
+plot(m2.1, 1:4)
+
+par(mfrow = c(1,1))
+
+```
+
+
+##5. Medidas de influência
+
+Acima pode-se verificar que existe um ponto candidato a influente, que é a observação 15, por ter valor de distância de cook aproximadamente 0,6. Fizemos um teste retirando-a da análise para observar se havia diferença significativa entre modelos, para garantir que ela não está dando o efeito de superestimação ou subestimação de coeficientes.
+
+```{r, warnings=FALSE, include=FALSE}
+
+influenceIndexPlot(m2.1, vars=c("Cook", "Studentized", "hat"), main="Medidas de Influência")
+
+```
+
+
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=TRUE}
+
+da['15',]
+da['22',]
+
+m2.3<-update(m2.1,subset=-c(15,22))
+compareCoefs(m2.1,m2.3)
+
+
+```
+
+**sem 15 e 22** 
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=TRUE}
+# Tabela 2 - Modelo sem penalização
+summary(m2.3)
+influenceIndexPlot(m2.3,vars=c('Studentized','Cook','Hat'),id.n=3)
+```
+
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=TRUE}
+kable(coefficients(m2.3), caption= "Tabela 5 - Estimativas dos coeficientes do modelo ajustado")
+
+```
+
+##5.1 Resíduos Quantílicos Aleatorizados
+
+```{r, warnings=FALSE, include=TRUE}
+par(mfrow=c(1,2))
+
+res <- qresiduals(m2.3)
+
+plot(res)
+
+residuos <- qresiduals(m2.3)
+qqnorm(residuos)
+qqline(residuos, col = 2)
+
+```
+
+##5.2 Gráfico Normal de Probabilidades com Envelope Simulado
+
+```{r, warnings=FALSE, include=TRUE}
+
+par(mfrow=c(1,1))
+hnp(m2.3, xlab = 'Percentil da N(0,1)', ylab = 'Resíduos', main = 'Gráfico Normal de Probabilidades')
+
+
+```
+
+
+##5.3 Gráficos de Efeitos
+
+```{r}
+
+plot(allEffects(m2.3), type = 'response', main = '')
+
+
+```
+
+
+#6. Interpretação
+
+A interpretação deste modelo envolve a transformação das variáveis brutas (escala do preditor linear) para escala da resposta, em termos de suas probabilidades. Segue um exemplo abaixo de como é feita a leitura do acréscimo de uma variável, fixando outras variáveis, e qual seu impacto direto na probabilidade de óbito por acidente de trânsito.
+
+
+
+
+# Conclusão
+
+Após análise de distribuição, verificando que a Poisson não é aderente a esta população e escolhendo a Binomial Negativa como melhor aproximação, foram feitos alguns testes nas variáveis, avaliando correlação entre elas, criando uma nova variável que melhor descrevia o comportamento de duas, chegou-se a um modelo candidato. 
+Foi necessário realizar uma "Limpeza" em sua composição, retirando um covariável pouco significativa e chegando a um modelo com intercepto, log do número de estabelecimentos de saúde e log da frota média, tendo indicativos para afirmar que ele prediz bem o número de acidentes de trânsito no Estado do Alagoas.
+
+
+
+
+

@@ -1,0 +1,481 @@
+---
+title: "Trabalho de Modelos Lineares Generalizados"
+author: "Ananda Bordignon^[GRR20149157], Brendha Lima^[GRR20149163], Giovanna Lazzarin^[GRR20149088]"
+date: "12 de Novembro de 2018"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+
+# Resumo
+
+
+O objetivo deste trabalho é apresentar uma análise estatística, por meio de um modelo linear generalizado dados binários (ou seja, com variável resposta do tipo dicotômica), dos dados dos referentes ao número de pacientes diagnosticadas ou não com câncer de mama. As covariáveis são um conjunto de medidas retiradas de nódulos da mama, e envolvem raio, área, perímetro, textura, suavidade, compacicidade, pontos côncavos, simetria, concavidade e dimensão fractal, todos em forma de média por conta das irregularidades presentes nos caroços. Foram avaliados quais era os comportamentos de cada covariável quando o diagnóstico era de nódulo com tecido maligno para observar sua coerência e ligação direta com a resposta, houve estudo para selecionar qual seria a melhor função de ligação a ser utilizada entre as possíveis para a Distribuição Binomial e vários ajustes das covariáveis melhor descritos ao longo do documento. A seleção final indica que   
+
+
+#1. Introdução
+                                                                                    
+Em torno do mundo, câncer de mama é o tipo mais comum de câncer em mulheres e é o segundo maior em termos de taxas de mortalidade. O diagnóstico do câncer de mama é obtido quando um caroço anormal é encontrado (por auto exame ou raio-x) ou quando um minúsculo grão de cálcio é encontrado (raio-x).Depois que o caroço suspeito é encontrado, o doutor vai conduzir um diagnóstico para determinar se é cancerígeno, e se for, se ele se espalhou para outras partes do corpo. 
+
+Este conjunto de dados foi obtido da University of Wisconsin Hospitals, em Mison através do Dr. William H. Wolberg. Nesses dados, os recursos são calculados a partir de uma imagem digitalizada de um aspirador de agulha fina (PAAF) de uma massa mamária. 
+
+O trabalho contém uma breve análise descritiva (para melhor entender a base de dados), ajuste de um modelo buscando explicar a quantidade de diagnósticos positivos em função das covariáveis disponíveis, diagnóstico para verificação se o modelo proposto nas circunstâncias se ajusta bem aos dados disponíveis, comparativo entre as distribuições propostas e quais os eventuais problemas dos dados e do método utilizado para a análise.
+
+Entre as covariáveis disponíveis para explicar o número de diagnósticos positivos há, por exemplo, área, raio, tamanho e espessura do nódulo, etc.
+
+#2. Material e métodos
+## 2.1 Conjunto de dados
+
+Os dados utilizados para aplicação do modelo linear generalizado provêm de um estudo da University of Wisconsin Hospitals e contém um total de 569 observações.
+
+A base de dados contém uma série de covariáveis, as quais tiveram sua significância testada no que diz respeito a sua influência no diagnóstico etc, são elas:
+
+1. Mean_radius: raio médio da distância do centro ao perímetro;
+
+2. Mean_texture: textura média, irregularidades;
+
+3. Mean_perimeter: perímetro médio do tumor;
+
+4. Mean_area: área média;
+
+5. Mean_smoothness: regularidade média (média da variação local);
+
+6. Mean_compactness: compacicidade média;
+
+7. Mean_concavity: concavidade média;
+
+8. Mean_concave_points: média de pontos côncavos;
+
+9. Mean_symmetry: simetria média;
+
+10. Mean_fractal_dimension: média da dimensão fractal; 
+
+11. Diagnóstico (variável resposta): M para nódulo maligno (câncer) e B para nódulo benigno.
+
+Os dados se dispuseram desta forma: 
+
+
+```{r, echo=FALSE, warning=FALSE, include=FALSE, results='hide'}
+library(tidyverse)
+library(readxl)
+
+dados <- read.table("wdbc.txt", sep = ",")
+
+names(dados) <- c("ID","diagnostico","radius","texture","perimeter","area","smoothness","compactness","concavity","concave_points","symmetry","fractal_dimension","mean_radius","mean_texture","mean_perimeter","mean_area","mean_smoothness","mean_compactness","mean_concavity","mean_concave_points","mean_symmetry","mean_fractal_dimension","se_radius","se_texture","se_perimeter","se_area","se_smoothness","se_compactness","se_concavity","se_concave_points","se_symmetry","se_fractal_dimension")
+
+
+dados$mean_radius          <- as.numeric(dados$mean_radius)
+dados$mean_texture         <- as.numeric(dados$mean_texture)
+dados$mean_perimeter       <- as.numeric(dados$mean_perimeter)
+dados$mean_area            <- as.numeric(dados$mean_area)
+dados$mean_smoothness      <- as.numeric(dados$mean_smoothness)
+dados$mean_compactness     <- as.numeric(dados$mean_compactness)
+dados$mean_concavity       <- as.numeric(dados$mean_concavity)
+dados$mean_concave_points  <- as.numeric(dados$mean_concave_points)
+dados$mean_symmetry        <- as.numeric(dados$mean_symmetry)
+dados$mean_fractal_dimension <- as.numeric(dados$mean_fractal_dimension)
+
+dados$diagnostico <- as.factor(dados$diagnostico)
+
+summary(dados)
+dados1 <- dados[,c(2,13:22)]
+summary(dados1)
+``` 
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=FALSE, results='hide'}
+library(knitr)
+
+head_dados <- head(dados1) 
+names(head_dados) <- c("Diagnóstico","Raio médio","Textura média","Perím. médio","Área média","Suav. média","Compac. média","Concavidade média","Pts concavos médios","Simetria média","Dim fractal média")
+```
+
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=TRUE}
+kable(head_dados[1:6, 1:6], caption= "Tabela 1 - Primeiras observações da base de dados")
+```
+
+
+##2.2 Recursos computacionais 
+
+O *software R* foi utilizado para ajustar os modelos lineares generalizados aos dados descritos. Os pacotes utilizados para auxílio deste trabalho foram: o pacote car, effects, statmod, ggplot, gridExtra, entre outros.
+
+
+##2.3 Métodos
+
+A proposta para modelar o número de diagnósticos foi o modelo linear generalizado com distribuição Binomial, pois é aplamente utilizada quando a variável de resposta é dicotômica. A construção do modelo Binomial se dá através de múltiplas repetições de Bernoulli e é caracterizada como a distribuição de probabilidades discreta do número de ocorrências de algum evento numa sequência de tentativas, tendo *n* ensaios realizados e *k* ocorrências do evento (com k=1, ..., n), pode-se expressar a probabilidade de sucesso conforme a fórmula abaixo.
+
+```{r, echo=FALSE, warning=FALSE, fig.align='center'}
+
+knitr::include_graphics("C:/Users/Brendha Lima/Desktop/UFPR/Modelos Lineares Generalizados/trabalho 1 2018/v3/binomial.png")
+
+```
+
+Será também utilizado uma função de ligação escolhida entre: logito, probito, complemento log-log e cauchy, que são funções de ligações possíveis para a distribuição Binomial.
+
+#3. Resultados e discussão
+
+##3.1 Análise descritiva
+A análise descritiva dos dados, realizada antes dos ajustes dos modelos, teve como objetivo observar qual é o comportamento de todas as possíveis covariáveis em relação à variável resposta e se dá na seguinte forma:
+
+```{r, echo=FALSE, warning=FALSE,fig.align='center', include=TRUE, results='hide'}
+# ProporÃ§ao das classes
+tab2 <- round(prop.table(table(dados1$diagnostico)), 2)
+``` 
+
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=TRUE}
+kable(tab2, col.names=c("Diag.", "Prop."), caption= "Tabela 2 - Proporção de diagnósticos")
+
+```
+
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=FALSE}
+
+library(ggplot2)
+library(gridExtra)
+
+
+graf1 <- dados1 %>% ggplot(aes(mean_radius)) + geom_histogram(fill = 'orange', binwidth = 0.05) + facet_wrap(~diagnostico) + labs(y = 'Quantidade', x = 'Valores da covariável', title = 'Raio médio') + theme_classic()
+
+graf2 <- dados1 %>% ggplot(aes(mean_texture)) + geom_histogram(fill = 'orange' , binwidth = 0.05) + facet_wrap(~diagnostico) +
+                    labs(y = 'Quantidade', x = 'Valores da covariável', title = 'Textura média') + theme_classic()
+
+graf3 <- dados1 %>% ggplot(aes(mean_perimeter)) + geom_histogram(fill = 'orange' , binwidth = 0.05) + facet_wrap(~diagnostico) +
+                    labs(y = 'Quantidade', x = 'Valores da covariável', title = 'Perímetro médio') + theme_classic()
+
+graf4 <- dados1 %>% ggplot(aes(mean_area)) + geom_histogram(fill = 'orange' , binwidth =20) + facet_wrap(~diagnostico) +
+                    labs(y = 'Quantidade', x = 'Valores da covariável', title = 'Área média') + theme_classic()
+
+graf5 <- dados1 %>% ggplot(aes(mean_smoothness)) + geom_histogram(fill = 'orange' , binwidth = 0.001) + facet_wrap(~diagnostico) +
+                    labs(y = 'Quantidade', x = 'Valores da covariável', title = 'Suavidade média') + theme_classic()
+
+graf6 <- dados1 %>% ggplot(aes(mean_compactness)) + geom_histogram(fill = 'orange' , binwidth = 0.005) + facet_wrap(~diagnostico) +
+                    labs(y = 'Quantidade', x = 'Valores da covariável', title = 'Compacicidade') + theme_classic()
+
+graf7 <- dados1 %>% ggplot(aes(mean_concavity)) + geom_histogram(fill = 'orange' , binwidth = 0.05) + facet_wrap(~diagnostico) +
+                    labs(y = 'Quantidade', x = 'Valores da covariável', title = 'Concavidade') + theme_classic()
+
+graf8 <- dados1 %>% ggplot(aes(mean_concave_points)) + geom_histogram(fill = 'orange' , binwidth = 0.001) + facet_wrap(~diagnostico) +
+                    labs(y = 'Quantidade', x = 'Valores da covariável', title = 'Pontos de concavidade') + theme_classic()
+
+graf9 <- dados1 %>% ggplot(aes(mean_symmetry)) + geom_histogram(fill = 'orange' , binwidth = 0.001) + facet_wrap(~diagnostico) +
+                    labs(y = 'Quantidade', x = 'Valores da covariável', title = 'Simetria') + theme_classic()
+
+graf10 <- dados1 %>% ggplot(aes(mean_fractal_dimension)) + geom_histogram(fill = 'orange' , binwidth = 0.05) + facet_wrap(~diagnostico) +
+                    labs(y = 'Quantidade', x = 'Valores da covariável', title = 'Dimensão fractal') + theme_classic()
+
+# PODE-SE USAR TAMBÉM ESTES
+# par(mfrow=c(3,4))
+# graf1<- plot(dados1$diagnostico, dados1$mean_radius)
+# graf2<- plot(dados1$diagnostico, dados1$mean_texture)
+# graf3<- plot(dados1$diagnostico, dados1$mean_perimeter)
+# graf4<- plot(dados1$diagnostico, dados1$mean_area)
+# graf5<- plot(dados1$diagnostico, dados1$mean_smoothness)
+# graf6<- plot(dados1$diagnostico, dados1$mean_compactness)
+# graf7<- plot(dados1$diagnostico, dados1$mean_concavity)
+# graf8<- plot(dados1$diagnostico, dados1$mean_concave_points)
+# graf9<- plot(dados1$diagnostico, dados1$mean_symmetry)
+# graf10<- plot(dados1$diagnostico, dados1$mean_fractal_dimension)
+
+
+```
+
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=TRUE}
+grid.arrange(graf1, graf2, graf3, ncol=3, nrow=1)
+grid.arrange(graf4, graf5, graf6, ncol=3, nrow=1)
+grid.arrange(graf7, graf8, graf9, ncol=3, nrow=1)
+grid.arrange(graf10, ncol=3, nrow=1)
+
+```
+
+Acima pode se observar que os histogramas apresentam comportamentos diferentes para as duas classes, como por exemplo, pessoas diagnosticadas com câncer (tumor maligno) possuem um raio médio maior do que as que não têm a doença, tendendo a ser mais compactos e com perímetro maior do que aqueles que são benignos.
+
+
+##3.2 Ajuste dos modelos
+
+Foram testadas 4 funções para modelos lineares generalizados da família Binomial para modelar o número de diagnósticos, são elas: função logit, probit, complemento log-log e Cauchy.
+
+*Dizer aqui que a função PROBITO funciona melhor pois têm menor valor AIC*
+
+
+TABELA DEVIANCE
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=FALSE, results='hide'}
+ajuste1 <- glm(diagnostico ~ .,family=binomial(link = (link='logit')),data = dados1)
+ajuste2 <- glm(diagnostico ~ .,family=binomial(link = (link='probit')),data = dados1)
+ajuste3 <- glm(diagnostico ~ .,family=binomial(link = (link='cloglog')),data = dados1)
+ajuste4 <- glm(diagnostico ~ .,family=binomial(link = (link='cauchit')),data = dados1)
+
+
+selec <- data.frame(ajuste=c('logito', 'probito', 'cloglog', 'cauchy'),
+                    aic=c(AIC(ajuste1), AIC(ajuste2), AIC(ajuste3), AIC(ajuste4)),
+                    logLik=c(logLik(ajuste1),logLik(ajuste2),logLik(ajuste3),logLik(ajuste4)))
+
+selec
+
+```
+
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=TRUE}
+kable(selec, caption= "Tabela 3 - Resultados dos ajustes")
+
+summary(ajuste1)
+summary(ajuste2)
+```
+
+Ao realizarmos teste comparativo de AIC (Critério de Informação de Akaike), ambos links logito e probito obtiveram resultado praticamente igual (287,9 e 285,8) e c log-log e cauchy tiveram valores mais altos (295 e 300). Através da análise de Deviance, a qualidade do ajuste também é muito próxima (-132,95 e -132,37), optou-se então pelo link logito por ser mais simples de leitura e mais comumente utilizado.
+
+
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=FALSE}
+
+envelope=function(modelo){
+  dados=na.omit(modelo$data)
+  nsim=100
+  n=modelo$df.null+1
+  r1=sort(rstandard(modelo,type='deviance'))
+  m1=matrix(0,nrow=n,ncol=nsim)
+  a2=simulate(modelo,nsim=nsim)
+  
+  for (i in 1:nsim){
+    dados$diagnostico=a2[,i]
+    aj=update(modelo,diagnostico~.,data=dados1)
+    m1[,i]=sort(rstandard(aj,type='deviance'))}
+  
+  li=apply(m1,1,quantile,0.025)
+  m=apply(m1,1,quantile,0.5)
+  ls=apply(m1,1,quantile,0.975)
+  
+  quantis=qnorm((1:n-0.5)/n)
+  
+  plot(rep(quantis,2),c(li,ls),type='n',xlab='Percentil da N(0,1)',ylab='Resíduos')
+  title('Gráfico Normal de Probabilidades')
+  lines(quantis,li,type='l')
+  lines(quantis,m,type='l',lty=2)
+  lines(quantis,ls,type='l')
+  points(quantis,r1,pch=16,cex=0.75)
+}
+par(mfrow=c(2,2))
+envelope(ajuste1)
+envelope(ajuste2)
+envelope(ajuste3)
+envelope(ajuste4)
+
+
+par(mfrow=c(2,2))
+plot(ajuste1, 1:4)
+
+
+library(car)
+influenceIndexPlot(ajuste2)
+
+
+library(statmod)
+res <- qresiduals(ajuste1)
+plot(res)
+residuos <- qresiduals(ajuste1)
+qqnorm(residuos)
+qqline(residuos, col = 2)
+shapiro.test(residuos)
+
+
+envelope(ajuste2)
+```
+
+
+Ao assumir que a variável resposta tem distribuição de probabilidade binomial, para adequar a resposta média ao modelo linear será usada a função de ligação logito:
+```{r, echo=FALSE, warning=FALSE, fig.align='center'}
+knitr::include_graphics("C:/Users/Brendha Lima/Desktop/UFPR/Modelos Lineares Generalizados/trabalho 1 2018/v3/logit2.png")
+```
+
+Com *n*= 569 observações, *xi* como valor da variável explicativa e *yi* número de ocorrências do evento. A função de ligação também pode ser escrita na forma abaixo:
+```{r, echo=FALSE, warning=FALSE, fig.align='center'}
+knitr::include_graphics("C:/Users/Brendha Lima/Desktop/UFPR/Modelos Lineares Generalizados/trabalho 1 2018/v3/logit3.png")
+```
+
+
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=FALSE}
+### Vamos usar um glm com resposta binomial e ligação logito (regressão logística) 
+
+
+dados1 <- dados1[,1:11]
+
+### Primeiro, usando todas as covariáveis.
+ajuste <- glm(diagnostico ~ ., data = dados1, family = 'binomial')
+logLik(ajuste)
+AIC(ajuste)
+BIC(ajuste)
+
+### Agora, o modelo nulo, apenas com o intercepto.
+ajuste_null <- glm(diagnostico ~ 1, data = dados1, family = 'binomial')
+logLik(ajuste_null)
+AIC(ajuste_null)
+BIC(ajuste_null)
+
+########################################################################
+### Métodos de seleção de covariáveis
+### Seleção de covariáveis - método backward
+
+s1a <- step(ajuste, direction = 'backward')
+summary(s1a) ### Resumo do modelo produzido pelo método backward.
+### 4 covariáveis foram selecionadas para compor o modelo (raio, area, compacicidade e dimensão fractal).
+
+### Seleção de covariáveis - método forward. Para o método forward, o modelo
+### de partida é o modelo nulo, e precisamos definir o escopo, referente às
+### variáveis consideradas para inclusão.
+s2a <- step(ajuste_null, scope = formula(ajuste), direction = 'forward')
+summary(s2a)
+
+### Finalmente, o método stepwise combinado.
+s3a <- step(ajuste_null, scope = formula(ajuste), direction = 'both')
+summary(s3a)
+
+modelo_ajustado <- s3a
+
+### Os resultados coincidem com os produzidos pelos outros algoritmos
+
+
+dados1$predicao <- predict(modelo_ajustado)
+dados1$residuos <- modelo_ajustado$residuals
+
+```
+
+**Ajuste 1 - Modelo utilizando Método Stepwise** 
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=TRUE}
+# Tabela 2 - Modelo sem penalização
+summary(s3a)
+```
+
+
+Após realizar os ajustes de modelos utilizando o método Stepwise, a seleção final de variáveis significativas, que mais ajudam a explicar se o tipo do nódulo é maligno ou benigno são: raio médio, área média, compacicidade e dimensão fractal, cujos comportamentos podem ser observados abaixo:
+
+```{r, echo=FALSE, warning=FALSE, fig.align='center'}
+
+par(mfrow=c(2,2))
+
+plot(dados1$diagnostico, dados1$mean_radius, ylab="Raio médio")
+plot(dados1$diagnostico, dados1$mean_area, ylab="Área média")
+plot(dados1$diagnostico, dados1$mean_compactness, ylab="Compacicidade média")
+plot(dados1$diagnostico, dados1$mean_fractal_dimension, ylab="Dimensão fractal média")
+
+```
+
+*Qualidade do ajuste*
+A seguir temos alguns métodos para avaliar se este ajuste de modelo é o ideal, e será analisado através gráficos de resíduos, com sua dispersão e através de envelope.
+
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=FALSE}
+
+dados_res<- (dados1[,1:11])
+head(dados_res)
+```
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=TRUE}
+
+# Checando os residuos
+
+graf_res <- dados_res %>% 
+  filter(residuos > -20) %>% 
+  ggplot(aes(residuos)) +
+  geom_density(fill = 'lightseagreen') + 
+  theme_classic()
+grid.arrange(graf_res, ncol=2, nrow=1)
+
+```
+  
+  
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=FALSE}
+
+# Avaliando qualidade do ajuste  
+envelope=function(modelo_ajustado){
+  dados=na.omit(modelo_ajustado$data)
+  nsim=100
+  n=modelo_ajustado$df.null+1
+  r1=sort(rstandard(modelo_ajustado,type='deviance'))
+  m1=matrix(0,nrow=n,ncol=nsim)
+  a2=simulate(modelo_ajustado,nsim=nsim)
+  
+  for (i in 1:nsim){
+    dados$diagnostico=a2[,i]
+    aj=update(modelo_ajustado,diagnostico~.,data=dados1)
+    m1[,i]=sort(rstandard(aj,type='deviance'))}
+  
+  li=apply(m1,1,quantile,0.025)
+  m=apply(m1,1,quantile,0.5)
+  ls=apply(m1,1,quantile,0.975)
+  
+  quantis=qnorm((1:n-0.5)/n)
+  
+  plot(rep(quantis,2),c(li,ls),type='n',xlab='Percentil da N(0,1)',ylab='Resíduos')
+  title('Gráfico Normal de Probabilidades')
+  lines(quantis,li,type='l')
+  lines(quantis,m,type='l',lty=2)
+  lines(quantis,ls,type='l')
+  points(quantis,r1,pch=16,cex=0.75)
+}
+
+```
+
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=TRUE}
+par(mfrow=c(2,2))
+
+library(car)
+library(statmod)
+res <- qresiduals(modelo_ajustado)
+plot(res)
+residuos <- qresiduals(modelo_ajustado)
+qqnorm(residuos)
+qqline(residuos, col = 2)
+shapiro.test(residuos)
+
+
+envelope(modelo_ajustado)
+
+# p valor alto do Teste de Shapiro Wilk indica forte evidência para resíduos com distribuição normal
+
+```
+
+A variância dos resíduos aproximadamente homogênea, gráfico quantil quantil bem ajustado (apresenta linearidade dos dados) e teste de Shapiro Wilk corrobora com a teste de normalidade dos resíduos.
+
+*Pontos influentes*  
+
+Utilizou-se distância de Cook para identificar pontos de alavancagem, ou seja, aqueles pontos extremos que podem estar interferindo na estimação de coeficientes da regressão.
+
+```{r, echo=FALSE, warning=FALSE, fig.align='center', include=TRUE}
+
+library(car)
+influenceIndexPlot(modelo_ajustado)
+
+
+s3aa <- update(s3a, data = dados1[-which(rownames(dados1) == '291'),])
+compareCoefs(s3a, s3aa)
+summary(s3aa)
+influenceIndexPlot(s3aa)
+
+pchisq(s3aa$deviance, s3aa$df.residual, lower.tail = FALSE)
+
+qchisq(0.95, s3aa$df.residual)
+
+glm(formula = diagnostico ~ mean_area + mean_radius + mean_compactness , family = "binomial", data = dados1[-which(rownames(dados1) == 
+    "291"), ])
+
+```
+
+
+!!!!!!!!!!!!!! Achar quais são eles, quais variáveis possuem. Realizar um ajuste com e outro sem, para comparar coeficientes. Pode ser que valores extremos naturalmente façam parte do conjunto de dados, temos que argumentar.
+
+
+FÓRMULA FINAL (MUDAR PARÂMETROS!!!!!!!!!!!!!!!!!!!!!!!!!!!)
+
+Escala do preditor:
+????????????(????^) = 1,323 ??? 0,059. ????2 ??? 0,823. ????31 ??? 0,823. ????32 + 0,021. ????4 + 0,012. ????5 + + 0,237. ????8
+Escala da resposta:
+????^ = ????
+1,323???0,059.????2???0,823.????31???0,823.????32+0,021.????4+0,012.????5+0,013.????6+0,237.????8
+
+
+
+#4. Considerações finais
+
+Em um primeiro momento, foi observado que a área, raio, compacicidade e dimensão fractal médios estavam diretamente ligados ao fato do nódulo mamário ser benigno ou maligno, portanto de todas as 10 covariáveis possíveis, apenas 4 entraram no modelo ideal.
+
+O gráfico de resíduos versus valores ajustados e o gráfico normal de probabilidades com
+envelope simulado não apresentaram problemas, sendo isto considerado uma evidência de
+bom ajuste do modelo.
+
+Após análise de pontos influentes, foi ajustado um modelo retirando estas observações que eram extremas e chegou-se a conclusão de que sua retirada não mudava muito as estimativas dos coeficientes da regressão (RODAR E OBSERVAR SE INFLUENCIA OU NÃO E COLOCAR AQUI).
+
+A conclusão final é de que quanto maior a área média, raio médio e compacicidade média, maior a probabilidade do nódulo ser maligno. Além disso, para o aumento de XXXX unidades, em média, se aumenta em XXX a probabilidade de malignidade.
+

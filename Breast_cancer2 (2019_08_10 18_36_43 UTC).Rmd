@@ -1,0 +1,216 @@
+---
+title: "Untitled"
+author: "Ananda Bordignon, Brendha Lima, Giovanna Lazzarin"
+date: "12 de novembro de 2018"
+output: pdf_document
+---
+
+
+# Resumo
+Em torno do mundo, câncer de mama é o tipo mais comum de câncer em mulheres e é o segundo maior em termos de taxas de mortalidade. O diagnóstico do câncer de mama é obtido quando um caroço anormal é encontrado (por auto exame ou raio-x) ou quando um minúsculo grão de cálcio é encontrado (raio-x).Depois que o caroço suspeito é encontrado, o doutor vai conduzir um diagnóstico para determinar se é cancerígeno, e se for, se ele se espalhou para outras partes do corpo. Este conjunto de dados foi obtido da University of Wisconsin Hospitals, em Madison através do Dr. William H. Wolberg.
+
+# Introdução
+
+O objetivo deste trabalho é apresentar uma análise estatística, por meio de um modelo linear generalizado para dados de contagem, em dados referentes ao número de pacientes diagnosticadas ou não com câncer de mama.
+
+O trabalho contém uma breve análise descritiva (para melhor entender a base de dados), ajuste de um modelo buscando explicar a quantidade de diagnósticos positivos em função das covariáveis disponíveis, diagnóstico para verificação se o modelo proposto nas circunstâncias se ajusta bem aos dados disponíveis, comparativo entre as distribuições propostas e quais os eventuais problemas dos dados e do método utilizado para a análise.
+
+Entre as covariáveis disponíveis para explicar o número de visitas há, por exemplo, área, raio,tamanho e espessura do nódulo, etc.
+
+# Material e métodos
+##conjunto de dados
+
+Os dados utilizados para aplicação do modelo linear generalizado provêm de um estudo da University of Wisconsin Hospitals e contém um total de XX observações.
+
+A base de dados contém uma série de covariáveis; as quais tiveram sua significância testada no que diz respeito a sua influência no diagnóstico etc, são elas:
+
+- mean_radius: raio médio da distância do centro ao perímetro;
+
+- mean_texture: textura média, irregularidades (standard deviation of gray-scale values = ANÁLISE DE TEXTURA ESTATÍSTICA http://www.lcad.icmc.usp.br/~jbatista/procimg/2012/textura);
+
+- mean_perimeter: perímetro médio do tumor;
+
+- mean_area: área média;
+
+- mean_smoothness: regularidade média (mean of local variation in radius lengths)
+
+- diagnosis: 1: nódulo maligno; 0: nódulo benigno
+
+Os dados se dispuseram desta forma: 
+
+
+```{r, echo=FALSE, warning=FALSE, include=TRUE, results='hide'}
+library(knitr)
+library(tidyverse)
+da <- read.csv('Breast_cancer_data.csv', sep = ';')
+library(readxl)
+dados <- read_excel("~/Desktop/UFPR/Modelos Lineares Generalizados/trabalho 1 2018/Breast_cancer_data.xlsm")
+names(dados) <- c("raio","textura","perimetro","area","regularidade","diagnostico")
+names(da) <- c("raio","textura","perímetro","área","regularidade","diagnostico")
+
+
+dados$diagnostico <- factor(dados$diagnostico)
+
+
+
+```
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+kable(da[1:6,], caption = "Primeiras linhas da base")
+```
+
+
+##recurso computacionais 
+
+O *software R* foi utilizado para ajustar os modelos lineares generalizados aos dados descritos. Os pacotes utilizados para auxílio deste trabalho foram: o pacote car, effects, statmod entre outros.
+
+
+##métodos
+
+A proposta para modelar o número de diagnósticos foi o modelo linear generalizado aditivo com distribuições Poisson e Binomial
+negativa, tais modelos são amplamente utilizadas quando a variável de resposta é uma
+contagem.
+
+
+# Resultados e discussão
+
+##análise descritiva
+A análise descritiva dos dados, realizada antes dos ajustes dos modelos se dá assim:
+
+```{r, echo=FALSE, warning=FALSE, include=TRUE, results='hide'}
+# Proporção das classes
+round(prop.table(table(da$diagnostico)), 2)
+
+# Graficos -------
+da %>% 
+  ggplot(aes(raio)) +
+  geom_histogram(fill = 'orange') +
+  facet_wrap(~diagnostico) +
+  labs(y = 'Contagem', x = 'Covariavel: raio médio',
+       title = 'Histograma por diagnóstico') +
+  theme_classic()
+
+```
+
+Aqui, vê-se que os histogramas são diferentes para as duas classes, aparentemente as pessoas diagnosticada com câncer possuem um raio médio menor do que as que nao tem a doença (e etc).
+
+##ajuste dos modelos
+
+Foram testadas 4 funções para modelos lineares generalizados da família Binomial para número o de diagnósticos, são elas: função logit, probit, complemento log-log e Cauchy.
+
+*Dizer aqui que a função PROBITO funciona melhor pois têm menor valor AIC*
+```{r, echo=FALSE, warning=FALSE}
+ajuste1 <- glm(diagnostico ~ .,family=binomial(link = (link='logit')),data = dados)
+ajuste2 <- glm(diagnostico ~ .,family=binomial(link = (link='probit')),data = dados)
+ajuste3 <- glm(diagnostico ~ .,family=binomial(link = (link='cloglog')),data = dados)
+ajuste4 <- glm(diagnostico ~ .,family=binomial(link = (link='cauchit')),data = dados)
+
+
+selec <- data.frame(ajuste=c('logito', 'probito', 'cloglog', 'cauchy'),
+                    aic=c(AIC(ajuste1), AIC(ajuste2), AIC(ajuste3), AIC(ajuste4)),
+                    logLik=c(logLik(ajuste1),logLik(ajuste2),logLik(ajuste3),logLik(ajuste4)))
+
+selec
+
+envelope=function(modelo){
+  dados=na.omit(modelo$data)
+  nsim=100
+  n=modelo$df.null+1
+  r1=sort(rstandard(modelo,type='deviance'))
+  m1=matrix(0,nrow=n,ncol=nsim)
+  a2=simulate(modelo,nsim=nsim)
+  
+  for (i in 1:nsim){
+    dados$diagnostico=a2[,i]
+    aj=update(modelo,diagnostico~.,data=dados)
+    m1[,i]=sort(rstandard(aj,type='deviance'))}
+  
+  li=apply(m1,1,quantile,0.025)
+  m=apply(m1,1,quantile,0.5)
+  ls=apply(m1,1,quantile,0.975)
+  
+  quantis=qnorm((1:n-0.5)/n)
+  
+  plot(rep(quantis,2),c(li,ls),type='n',xlab='Percentil da N(0,1)',ylab='Resíduos')
+  title('Gráfico Normal de Probabilidades')
+  lines(quantis,li,type='l')
+  lines(quantis,m,type='l',lty=2)
+  lines(quantis,ls,type='l')
+  points(quantis,r1,pch=16,cex=0.75)
+}
+par(mfrow=c(2,2))
+envelope(ajuste1)
+envelope(ajuste2)
+envelope(ajuste3)
+envelope(ajuste4)
+#######Apesar de da função probito ter dado menor AIC, graficamente tanto a logito, quanto a probito são boas, usaremos a função logito
+
+par(mfrow=c(2,2))
+plot(ajuste1, 1:4)
+
+
+library(car)
+influenceIndexPlot(ajuste2)
+
+
+library(statmod)
+res <- qresiduals(ajuste1)
+plot(res)
+residuos <- qresiduals(ajuste1)
+qqnorm(residuos)
+qqline(residuos, col = 2)
+shapiro.test(residuos)
+
+
+envelope(ajuste2)
+
+
+
+
+
+```
+
+
+```{r, echo=FALSE, warning=FALSE, include=TRUE, results='hide'}
+# Modelo
+modelo <- glm(diagnostico ~ ., data = da, 
+              family = binomial(link = 'logit'))
+
+summary(modelo)
+# O intercepto nao foi significativo
+
+# Modelo sem o intercepto
+modelo_2 <- glm(diagnostico ~ -1 + ., data = da, 
+              family = binomial(link = 'logit'))
+
+summary(modelo_2)
+# Conclusoes: todas as variaveis sao fortemente significativas
+
+da$predicao <- predict(modelo_2)
+
+da %>% 
+  ggplot(aes(y = exp(predicao)/(1+exp(predicao)), x = raio)) +
+  geom_point(colour = 'orange') +
+  geom_smooth(method="glm", 
+              method.args=list(family="binomial"), 
+              fullrange=TRUE, se=FALSE)  +
+  labs(y = 'Contagem', x = 'Covariavel: raio mÃ©dio',
+       title = 'Graficos de pontos das prediÃ§oes') +
+  theme_classic()
+
+
+da$residuos <- modelo_2$residuals
+
+# Checando os residuos
+da %>% 
+  filter(residuos > -20) %>% 
+  ggplot(aes(residuos)) +
+  geom_density(fill = 'orange') + 
+  theme_classic()
+
+```
+
+
+
+
+
+# Considerações finais 
